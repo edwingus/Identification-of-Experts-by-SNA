@@ -1,95 +1,91 @@
-#******************************************************************************
+
+# This is the user-interface definition of a Shiny web application.
+# You can find out more about building applications with Shiny here:
 #
-# ui.R
-# Generates the webpage interface for interaction with the user. The page is 
-# separated into two main panels, the left sidebar panel for entering setup 
-# information and the right main panel for displaying the results.
+# http://shiny.rstudio.com
 #
-#******************************************************************************
-shinyUI(pageWithSidebar(
-  headerPanel("Social Network Analysis - Expert Identification"),
-  sidebarPanel(
-     tags$head(
-#        tags$style(type='text/css', "#snaplot { border: 1px solid black;}")
-#        tags$style(type='text/css', ".datatables table td { height:20px; }")
-       tags$script(HTML("Shiny.addCustomMessageHandler('jsCode', function(message) {eval(message.code);});")),
-       tags$style(type='text/css', ".datatables table { text-align: center; border: 1px solid black; float:centre; }"),
-       tags$style(type='text/css', "#dt_gstats { height : 70px; }")
-     ),
-    progressInit(),
-    tabsetPanel(id="setup_tabset",
-                tabPanel("FILE UPLOAD",value="up_down_tab",
-                         selectInput('sel_filetype', 'Select File Format:', list('Compendex (txt)' = 'com', 'Previous (csv)' = 'csv')),
-                         fileInput('data_file', 'Choose File:',
-                                   accept=c('.csv','text/csv', 'text/comma-separated-values','text/plain')),
-                         selectInput('sel_group', 'Combine Authors By:', list('(2) or (5)' = 'all',
-                                                                              '(1) Full Name and Email or Affiliation' = 'full_both', 
-                                                                              '(2) Surname, Initials and Email or Affiliation' = 'initn_both',
-                                                                              '(3) Surname, Initials and Affiliation' = 'initn_affl', 
-                                                                              '(4) Surname, Initials and Email' = 'initn_email',
-                                                                              '(5) Full Name' = 'full_name', 
-                                                                              '(6) Surname and Initials' = 'init_name',
-                                                                              'None' = 'none'), 'all', multiple = FALSE),
-                         uiOutput("sel_dupicate"),
-                         HTML("<i><b>NOTE 1:</b> 'Combine Author By' is used to find the same author by the selected criteria, since the names 
-                              supplied by Compendex may differ.</i>"),
-                         br(),
-                         HTML("<i><b>NOTE 2:</b> 'Remove Duplicates By' is used to remove duplicated articles (i.e. selecting Title and 
-                                Volume will remove article(s) with the same title and volume, only leaving one.)</i>"),
-                         br(),br(),
-                         checkboxInput('usa_auth_b', 'Only USA Authors', FALSE),
-                         br(),
-                         actionButton("btn_upload","Upload"),
-                         br(), br(),
-                         uiOutput("delete_article")
-                         )
+
+library(shiny)
+
+shinyUI(dashboardPage(
+
+  # Application title
+  dashboardHeader(title = "Expert Identification"),
+
+  # Sidebar with a slider input for number of bins
+  # sidebarLayout(
+  dashboardSidebar(
+      tags$head(
+        tags$style(type="text/css", '#t_result tfoot, #t_selrow tfoot, #t_queue tfoot {display:none;}'),
+        tags$style(type="text/css", '#t_result tr, #t_selrow tr, #t_queue tr {border:1px solid blue;}'),
+        tags$style(type="text/css", "#btn_analysis, #btn_add {color:green;border:1px solid black;}"),
+        tags$style(type="text/css", "#btn_remove, #btn_clear  {color:red;border:1px solid black;}")
+      ),
+      fluidRow(
+      box(
+        width=12,
+        title = "File Upload", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+        selectInput('s_ftype', 'File Type:', db.l),
+        fileInput('data_file', 'Choose File:',
+                  accept=c('.csv','text/csv', 'text/comma-separated-values','text/plain', '.txt'))
+      ),
+      box(
+        width=12,
+        title = "Settings", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+        selectInput('s_ntype', 'Node Type:', node.type.l),
+        conditionalPanel(
+          condition = "input.s_ntype == 'term'",
+          # If using term node type, select the column to use to extract terms
+          # [1] title, [2] abstract, [3] keyword
+          selectInput('s_ttype', 'Term Type:', term.type.l),
+          # Specify which weighting function to use for the term-document matrix if 
+          # term selected as node.type.
+          selectInput('s_tweight', 'Term Weight:', term.weight.l),
+          # Specify the minimum term length to include in the matrix
+          numericInput("n_tlength","Min. Term Length:",1, 1, 10, 1)
+        ),
+        selectInput('s_displaycols', 'Display Columns (All Results):', choices = display.cols.l, selected = display.cols.l,
+                    multiple=TRUE),
+        #selectInput('s_plot', 'Plot Results:', c('Yes', 'No')),
+        conditionalPanel(
+          condition = "input.s_plot == 'Yes'",
+          selectInput('s_plotby', 'Plot by highest:', c('Betweenness', 'Degree')),
+          numericInput("n_pcount","Number of Nodes to Plot:", 20, 1, 100, 1),
+          selectInput('s_pedges', 'Plot All Edges:', c('Yes', 'No'))
+        )
+      )),
+      # br(),
+      actionButton("btn_analysis","Analysis")
+    ),
+
+    # Show a plot of the generated distribution
+  dashboardBody(
+      uiOutput("down_buttons"),
+      HTML("<br>"),
+      fluidRow(
+        box(
+          width=12,
+          title = "All Results (Click Row to Select)", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+      # HTML("Results Summary"),
+          dataTableOutput("t_result"),
+          uiOutput("add_button")
+        ),
+        box(
+          width=12,
+          title = "Selected Row", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+      # HTML("<hr>"),
+      # HTML("Selected Row"),
+          dataTableOutput("t_selrow")
+        ),
+        box(
+          width=12,
+          title = "Selected Results", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+      # textOutput('rows_out'),
+      # HTML("<hr>"),
+      # HTML("Selected Results"),
+          dataTableOutput("t_queue"),
+          uiOutput("queue_buttons")
+        ))
     )
-  ),
-  mainPanel( 
-    tabsetPanel(id="display_tabset",
-#                 tabPanel("Dataset", value="dataset_tab",
-#                          h5("DATASET"),
-#                          br(),
-#                          chartOutput('dt_alldata', 'datatables'),
-#                          br()
-#                 ),
-#                 tabPanel("Authors", value="authors_tab",
-#                          h5("AUTHORS"),
-# #                          uiOutput("btn_datadown"),
-#                          chartOutput('dt_authors', 'datatables'),
-#                          br()
-#                 ),
-#                 tabPanel("SNA Plot", value="snaplot_tab",
-#                          h5("SNA PLOT OUTPUT"),
-#                          div(class='row-fluid',
-#                              div(class="span3", numericInput("num_degree", "Minimum Degree Centrality to Plot:", 0, min = 0, step = 1)),
-#                              div(class="span1"),
-#                              div(class="span3", selectInput('graph_layout', 'Select Method for Generating Layout:', 
-#                                                             list(Auto = "layout.auto", Random = "layout.random", 
-#                                                                  Circle = "layout.circle", Fruchterman_Reingold = "layout.fruchterman.reingold",
-#                                                                  Kamada_Kawai = "layout.kamada.kawai", Spring = "layout.spring",
-#                                                                  Reingold_Tilford = "layout.reingold.tilford",
-#                                                                  DrL = "layout.drl"), "Fruchterman_Reingold"))
-#                          ),
-#                          checkboxInput('sna_label_b', 'Show Vertex Labels', TRUE),
-#                          HTML("<i><b>NOTE:</b> To save plot - right click SNA plot, then click Save Image As...</i>"),
-#                          plotOutput("sna_plot", height = "600px", width = "600px"),
-#                          br()
-#                 ),
-                tabPanel("SNA Summary", value="snaresult_tab",
-                      h5("SNA Graph Stats"),
-                      chartOutput("dt_gstats", "datatables"),
-                      HTML("<i><b>Density:</b> Sum of existing ties divided by the number of all possible ties.</i>"),
-                         
-                      selectInput('sel_result', 'Select Plot:', list("Degree", "Betweenness", "Closeness", "EigenVector",
-                                                                     "Local Cluster Coefficient" = "Local_Cluster")),
-                      plotOutput("result_plot")
-                ),
-                tabPanel("Download Results", value="download_tab",
-                  h5("DOWNLOAD RESULTS"),
-                  uiOutput("btn_datadown")
-                )
-    )
-  )
+  # )
 ))
-  
