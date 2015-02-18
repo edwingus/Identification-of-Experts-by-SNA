@@ -21,6 +21,9 @@ library(stringr)
 # shiny package required for creating the website
 library(shiny)
 
+
+source("db.settings.R", local=TRUE)$value
+
 # ------------------ SET GLOBAL VARS ------------------------#
 # Uploaded data
 g_data <- data.frame()
@@ -57,7 +60,7 @@ sep.l <- c("", " ", ",", ";", "\t", "-")
 # weighting function to use for term-document matrix
 term.weight.l <- c('nnn', 'ntc')
 
-display.cols.l <- c('Publications', 'Total.Citations', 'Degree', 'Betweenness', 'Closeness', 'EigenVector', 
+display.cols.l <- c('Publications', 'Degree', 'Betweenness', 'Closeness', 'EigenVector', 
                     'Local.Cluster')
 
 # ------------------ GLOBAL FUNCTIONS ------------------------#
@@ -74,36 +77,39 @@ load.data <- function(file.loc, db) {
   # if (length(wos.files) > 0 && length(com.files) > 0)
   #  stop("Select either Web of Science or Compendex Files, not both")
   
-  data <- data.frame()
   # if (length(wos.files) > 0)
     # for (i in wos.files) {
-  if (db == "wos") {
-      tryCatch(data.tmp <- read.table(file.loc, sep="\t", quote="", header=T, encoding = "UTF-8", na.string = NA, 
-                                      comment.char = "", fill = TRUE, blank.lines.skip = TRUE, row.names=NULL, 
-                                      stringsAsFactors = FALSE),
-               error = function(e) stop("Error opening/reading txt file. Ensure Web Of Science file downloaded according to description: ", e))
-      c.names <- colnames(data.tmp)
-      c.au <- match("AU", c.names)
-      if (!is.na(c.au)) {
-        colnames(data.tmp) <- c("PT", colnames(data.tmp)[-1:-(c.au-1)])
-      } else
-        stop("Author Column not part of Data. Ensure correct and complete data downloaded from WOS")
-      data <- rbind(data, data.tmp)                        
-    }
+  data <- switch(db,
+      'wos' = {
+        # data <- data.frame()
+        tryCatch(data.tmp <- read.table(file.loc, sep="\t", quote="", header=T, encoding = "UTF-8", na.string = NA, 
+                                        comment.char = "", fill = TRUE, blank.lines.skip = TRUE, row.names=NULL, 
+                                        stringsAsFactors = FALSE),
+                error = function(e) stop("Error opening/reading txt file. Ensure Web Of Science file downloaded according to description: ", e))
+        c.names <- colnames(data.tmp)
+        c.au <- match("AU", c.names)
+        if (!is.na(c.au)) {
+          colnames(data.tmp) <- c("PT", colnames(data.tmp)[-1:-(c.au-1)])
+        } else
+          stop("Author Column not part of Data. Ensure correct and complete data downloaded from WOS")
+        # rbind(data, data.tmp)
+        data.tmp
+      },
   
   # if (length(com.files) > 0)
     # for (i in com.files) {
       # Read Web of Science (wos) or Compendex(com) file. If error occurs reading
       # the file, return error
-  if (db == "com") {
-      tryCatch(data.tmp <- read.csv(file.loc, stringsAsFactors = FALSE),
-               error = function(e) stop("Error opening/reading csv file. Ensure Compendex file downloaded according to description: ", e))
-      data <- rbind(data, data.tmp) 
-    }
+      'com' = {
+        tryCatch(data.tmp <- read.csv(file.loc, stringsAsFactors = FALSE),
+                error = function(e) stop("Error opening/reading csv file. Ensure Compendex file downloaded according to description: ", e))
+        # rbind(data, data.tmp) 
+        data.tmp
+      },
+      "pat" = {}
+  )
   data <- unique(data)
   data <- data.frame(ID = seq(1,nrow(data)), data)
-  # doi.col <- which(colnames(data) %in% c("DIO", "DDI"))
-  # if (length(doi.col) != 0)
   return(data)
 }
 
@@ -113,50 +119,17 @@ extract.nodes <- function(data, db = "wos", node.type = "actor",
   # Determine which column from the data to select, specify the 
   # character seperating the nodes, and specify a regular expression
   # for removing unwanted characters
-  switch(db,
-         'wos' = {
-           # Columns to extract from the data for each node type selected
-           node.col <- switch(node.type,
-                              actor = c("AU", "C1", "TC", "DI", "ID"),
-                              term = switch(term.type, title = "TI", abstract = "AB", keyword = "DE"),
-                              affl = "C1",
-                              category = "WC")
-           node.sep <- sep.l[4]
-           node.reg <- ifelse(node.type == "affl", "\\s*\\[(.*?)\\]\\s*", "\\.+\\s*")
-           if (node.type == "actor")
-             node.type <- "actor.wos"
-         },
-         'com' = {
-           # Columns to extract from the data for each node type selected
-           node.col <- switch(node.type,
-                              actor = c("Author", "Author.affiliation", "Corresponding.author", "DOI", "ID"),
-                              term = switch(term.type, title = "Title", abstract = "Abstract", 
-                                            keyword = c("Controlled.Subject.terms", "Uncontrolled terms")),
-                              affl = "Author.affiliation",
-                              category = "Classification.code",
-                              journal = "Source")
-           # Characters seperating nodes in the data
-           node.sep <- switch(node.type,
-                              actor = c(sep.l[4], "\\s*\\([0-9]+\\)\\s*"), 
-                              affl = "\\s*\\([0-9]+\\)\\s*",
-                              category = "\\s*-\\s*",
-                              sep.l[4])
-           # Characters to be extracted from the dat
-           node.ext <- switch(node.type,
-                              actor = "\\s*\\([0-9]+\\)\\s*", 
-                              "")
-           #Characters to be removed from the data
-           node.rem <- switch(node.type,
-                              affl = "^\\([0-9]+\\)\\s*", 
-                              "\\s*\\(.+\\)\\s*")
-           if (node.type == "actor")
-             node.type <- "actor.com"
-         })
+#            if (node.type == "actor")
+#              node.type <- "actor.wos"
+
+  node.settings <- db.settings(db, node.type)
+#            if (node.type == "actor")
+#              node.type <- "actor.com"
   # Extract actors or terms from specified columns of data
   nodes <- switch(node.type,
                   term = {
                     # Create corpus using specified data and clean up terms
-                    nodes.tmp <- Corpus(VectorSource(data[, node.col]))
+                    nodes.tmp <- Corpus(VectorSource(data[, node.settings$col]))
                     nodes.tmp <- tm_map(nodes.tmp, tolower)
                     nodes.tmp <- tm_map(nodes.tmp, removePunctuation)
                     nodes.tmp <- tm_map(nodes.tmp, removeNumbers)
@@ -164,90 +137,85 @@ extract.nodes <- function(data, db = "wos", node.type = "actor",
                     removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
                     nodes.tmp <- tm_map(nodes.tmp, removeURL)
                     nodes.tmp <- tm_map(nodes.tmp, stripWhitespace)
-                    #                     if (stem) {
-                    #                       nodes.tmp.s <- tm_map(nodes.tmp, stemDocument)
-                    #                       nodes.tmp <- tm_map(nodes.tmp.s, stemCompletion, dictionary=nodes.tmp)
-                    #                     }
+#                     if (stem) {
+#                       nodes.tmp.s <- tm_map(nodes.tmp, stemDocument)
+#                       nodes.tmp <- tm_map(nodes.tmp.s, stemCompletion, dictionary=nodes.tmp)
+#                     }
                     
                     tm_map(nodes.tmp, PlainTextDocument)
                   },
-                  actor.com = {
-                    # nodes.tmp <- gsub(node.reg, "", data[, node.col]) 
+                  actor = {
                     # Split the nodes by the specified character
-                    actors.upper <- toupper(data[, node.col[1]])
-                    actors.tmp <- strsplit(actors.upper, split = node.sep[1])
-                    # Determine each actors affiliation from number in brackets next to name
-                    actor.affl <- lapply(actors.tmp, function(x) 
-                      as.numeric(sapply(strsplit(gsub(".*\\((.*)\\).*", '\\1', x), split = ","), function(y) y[[1]])) + 1)
-                    # Split the affiliations by the numbers
-                    affl.tmp <- strsplit(data[, node.col[2]], split = node.sep[2])
+                    actors.upper <- toupper(data[, node.settings$col[1]])
+                    actors.tmp <- strsplit(actors.upper, split = node.settings$sep[1])
                     nodes.tmp <- list()
                     list.ind <- 1
-                    for (i in 1:length(actor.affl)) {
-                      actors.tmp.i <- gsub(node.rem, "", str_trim(actors.tmp[[i]]))
-                      # Change first names to initials
-                      actors.tmp.i <-sapply(strsplit(actors.tmp.i, split = ","), 
-                                            function(x) {
-                                              l.name <- str_trim(x[1])
-                                              if (length(x) > 1) {
-                                                f.name <- strsplit(str_trim(x[2]), split = "\\s+")
-                                                f.name <- paste(sapply(f.name, function(y) gsub("^(.?).*", "\\1",y)), collapse = ".")
-                                                return(paste(l.name, f.name, sep = ","))
-                                              }
-                                              if (length(x) == 0 || tolower(l.name) == "anon")
-                                                return(NA)                                        
-                                              return(l.name)
-                                            })       
-                      affl.tmp.i <- gsub(node.rem, "", str_trim(affl.tmp[[i]][actor.affl[[i]]]))
-                      if (length(affl.tmp.i) == 0)
-                        affl.tmp.i <- NA
-                      
-                      if (length(actors.tmp.i) == 0)
-                        actors.tmp.i <- NA
-                      if (!is.na(actors.tmp.i[1])) {
-                        nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, Affiliation = affl.tmp.i, 
-                                                      Doc.info = data[i, node.col[3:5]])
-                        list.ind <- list.ind + 1
-                      }
-                    }
                     
-                    # Remove additional characters using the specified regular expression
-                    #lapply(nodes.tmp, function(x) gsub(node.rem, "", str_trim(unlist(x))))
-                    nodes.tmp
-                  },
-                  actor.wos = {
-                    # Split the nodes by the specified character
-                    actors.upper <- toupper(data[, node.col[1]])
-                    actors.tmp <- strsplit(actors.upper, split = node.sep[1])
-                    nodes.tmp <- list()
-                    list.ind <- 1
-                    for (i in 1:length(actors.tmp)) {
-                      actors.tmp.i <- str_trim(actors.tmp[[i]])                    
-                      if (length(actors.tmp.i) == 0)
-                        actors.tmp.i <- NA
-                      if (!is.na(actors.tmp.i[1])) {
-                        nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, Doc.info = data[i, node.col[3:5]])
-                        list.ind <- list.ind + 1
-                      }
-                    }
+                    switch(db, 
+                      'com' = {
+                        # Determine each actors affiliation from number in brackets next to name
+                        actor.affl <- lapply(actors.tmp, function(x) 
+                        as.numeric(sapply(strsplit(gsub(node.settings$affl, '\\1', x), split = ","), function(y) y[[1]])) + 1)
+                        # Split the affiliations by the numbers
+                        affl.tmp <- strsplit(data[, node.settings$col[2]], split = node.settings$sep[2])
+                      
+                        for (i in 1:length(actor.affl)) {
+                        actors.tmp.i <- gsub(node.settings$rem, "", str_trim(actors.tmp[[i]]))
+                        # Change first names to initials
+                        actors.tmp.i <-sapply(strsplit(actors.tmp.i, split = ","), 
+                                              function(x) {
+                                                l.name <- str_trim(x[1])
+                                                if (length(x) > 1) {
+                                                  f.name <- strsplit(str_trim(x[2]), split = "\\s+")
+                                                  f.name <- paste(sapply(f.name, function(y) gsub(node.settings$f.name, "\\1",y)), collapse = ".")
+                                                  return(paste(l.name, f.name, sep = ","))
+                                                }
+                                                if (length(x) == 0 || tolower(l.name) == "anon")
+                                                  return(NA)                                        
+                                                return(l.name)
+                                              })       
+                        affl.tmp.i <- gsub(node.settings$rem, "", str_trim(affl.tmp[[i]][actor.affl[[i]]]))
+                        if (length(affl.tmp.i) == 0)
+                          affl.tmp.i <- NA
+                        
+                        if (length(actors.tmp.i) == 0)
+                          actors.tmp.i <- NA
+                        if (!is.na(actors.tmp.i[1])) {
+                          nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, Affiliation = affl.tmp.i, 
+                                                        Doc.info = data[i, node.settings$col[3:5]])
+                          list.ind <- list.ind + 1
+                        }          
+                        }
+                      },
+                      'wos' = {
+                        for (i in 1:length(actors.tmp)) {
+                          actors.tmp.i <- str_trim(actors.tmp[[i]])                    
+                          if (length(actors.tmp.i) == 0)
+                            actors.tmp.i <- NA
+                          if (!is.na(actors.tmp.i[1])) {
+                            nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, Doc.info = data[i, node.settings$col[3:5]])
+                            list.ind <- list.ind + 1
+                          }
+                        }
+                      })    
+                    
                     nodes.tmp
                   },
                   category = {
-                    # nodes.tmp <- gsub(node.reg, "", data[, node.col]) 
+                    # nodes.tmp <- gsub(node.reg, "", data[, node.settings$col]) 
                     # Split the nodes by the specified character
-                    nodes.tmp <- strsplit(nodes.tmp, split = node.sep[3])
+                    nodes.tmp <- strsplit(nodes.tmp, split = node.settings$sep[3])
                     # Remove additional characters using the specified regular expression
-                    lapply(nodes.tmp, function(x) gsub(node.reg, "", str_trim(unlist(x))))
+                    lapply(nodes.tmp, function(x) gsub(node.settings$rem, "", str_trim(unlist(x))))
                   },
-{
-  # nodes.tmp <- gsub(node.reg, "", data[, node.col]) 
-  # Split the nodes by the specified character
-  nodes.tmp <- strsplit(nodes.tmp, split = node.sep[4])
-  # Remove additional characters using the specified regular expression
-  lapply(nodes.tmp, function(x) gsub(node.reg, "", str_trim(unlist(x))))
-})
-
-return(nodes) 
+                  {
+                    # nodes.tmp <- gsub(node.reg, "", data[, node.settings$col]) 
+                    # Split the nodes by the specified character
+                    nodes.tmp <- strsplit(nodes.tmp, split = node.settings$sep[4])
+                    # Remove additional characters using the specified regular expression
+                    lapply(nodes.tmp, function(x) gsub(node.settings$rem, "", str_trim(unlist(x))))
+                  })
+  return(nodes) 
 }
 
 # Create the Node-Document matrix
@@ -255,84 +223,92 @@ create.matrix <- function(nodes, node.type = "actor", db = "wos", term.minlength
                           term.weight = "ntc", match.max = 0.10, 
                           clean.str = "dpto|dept|department"){
   mat <- switch(node.type,
-                term = suppressWarnings(
-                  TermDocumentMatrix(nodes, 
-                                     control=list(wordLengths = c(term.minlength, Inf),
-                                                  weighting = function(x) 
-                                                    weightSMART(x, spec=term.weight)))),
-  {
-  if (node.type == "actor") {
-    nodes.all <- nodes
-    nodes <- lapply(nodes, function(x) x[[1]])
-  }
-  # Determine number of nodes per document
-  nodes.per.doc <- sapply(nodes, function(x) length(x))
-  # Create list of document numbers for each node 
-  nodes.doc.no <- rep(1:length(nodes.per.doc), times = nodes.per.doc)
-  nodes.unlist <- unlist(nodes)
-  # Determine number of nodes
-  node.count <- length(nodes.unlist)
-  # Clean up string by removing specified keywords and trimming
-  nodes.unlist <- sapply(strsplit(nodes.unlist, ","), 
-                         function(x) {
-                           match <- grep(clean.str, x, ignore.case = TRUE)
-                           if (length(match) > 0)
-                             paste(str_trim(x[-match]), collapse=",")
-                           else
-                             paste(str_trim(x), collapse=",")
-                         })
-  # Determine string lengths for each node, determine the max length for each adist comparison
-  mat.strlen <- t(matrix(str_length(nodes.unlist), nrow = node.count, ncol = node.count))
-  mat.strlen <- matrix(pmax(diag(mat.strlen), mat.strlen), nrow = node.count)
-  # Compare nodes by adist function. If nodes are close to one another, they are a match.
-  # The closeness of matches is set by match.max. If match.max is set to 0.1, then less
-  # than 10% of the strings must not match to be seen as the same.
-  match.b <- adist(nodes.unlist, nodes.unlist, ignore.case = TRUE)/mat.strlen < match.max
-  # Determine which nodes match
-  node.match <- apply(match.b, 1, function(x) which(x))
-  # Find unique matches. Since match of multiple nodes will have the same matching indexes,
-  # only include one.
-  node.match.unq <- node.match[!duplicated(node.match)]
-  # Determine document numbers for matching nodes
-  node.match.doc <- lapply(node.match.unq, function(x) nodes.doc.no[x])
+                term = 
+                  { 
+                  suppressWarnings(
+                              TermDocumentMatrix(nodes, 
+                                          control=list(wordLengths = c(term.minlength, Inf),
+                                                      weighting = function(x) 
+                                                      weightSMART(x, spec=term.weight))))
+                  },
+                  {
+                  if (node.type == "actor") {
+                    nodes.all <- nodes
+                    nodes <- lapply(nodes, function(x) x[[1]])
+                    }
+                    # Determine number of nodes per document
+                    nodes.per.doc <- sapply(nodes, function(x) length(x))
+                    # Create list of document numbers for each node 
+                    nodes.doc.no <- rep(1:length(nodes.per.doc), times = nodes.per.doc)
+                    nodes.unlist <- unlist(nodes)
+                    # Determine number of nodes
+                    node.count <- length(nodes.unlist)
+                    # Clean up string by removing specified keywords and trimming
+                    nodes.unlist <- sapply(strsplit(nodes.unlist, ","), 
+                                        function(x) {
+                                            match <- grep(clean.str, x, ignore.case = TRUE)
+                                            if (length(match) > 0)
+                                              paste(str_trim(x[-match]), collapse=",")
+                                            else
+                                              paste(str_trim(x), collapse=",")
+                                        })
+                    # Determine string lengths for each node, determine the max length for each adist comparison
+                    mat.strlen <- t(matrix(str_length(nodes.unlist), nrow = node.count, ncol = node.count))
+                    mat.strlen <- matrix(pmax(diag(mat.strlen), mat.strlen), nrow = node.count)
+                    # Compare nodes by adist function. If nodes are close to one another, they are a match.
+                    # The closeness of matches is set by match.max. If match.max is set to 0.1, then less
+                    # than 10% of the strings must not match to be seen as the same.
+                    match.b <- adist(nodes.unlist, nodes.unlist, ignore.case = TRUE)/mat.strlen < match.max
+                    # Determine which nodes match
+                    node.match <- apply(match.b, 1, function(x) which(x))
+                    # Find unique matches. Since match of multiple nodes will have the same matching indexes,
+                    # only include one.
+                    node.match.unq <- node.match[!duplicated(node.match)]
+                    # Determine document numbers for matching nodes
+                    node.match.doc <- lapply(node.match.unq, function(x) nodes.doc.no[x])
   
-  # Select unique actors
-  #                   nodes.unq <- unique(unlist(nodes))
+                    # Create nodes/document matrix
+                    mat.tmp <- matrix(0, nrow = length(node.match.doc), ncol = length(nodes), 
+                                  dimnames = list(nodes.unlist[!duplicated(node.match)], 1:length(nodes)))
+                    for (i in 1:nrow(mat.tmp))
+                      mat.tmp[i, node.match.doc[[i]]] <- 1
   
-  # Create nodes/document matrix
-  mat.tmp <- matrix(0, nrow = length(node.match.doc), ncol = length(nodes), 
-                    dimnames = list(nodes.unlist[!duplicated(node.match)], 1:length(nodes)))
-  for (i in 1:nrow(mat.tmp))
-    mat.tmp[i, node.match.doc[[i]]] <- 1
+                    mat.tmp <- as.matrix(mat.tmp)
+                    mat.adj <- mat.tmp %*% t(mat.tmp)
   
-  mat.tmp <- as.matrix(mat.tmp)
-  mat.adj <- mat.tmp %*% t(mat.tmp)
-  
-  if (node.type == "actor" && db == "com") {
-    affl.unlist <- unlist(lapply(nodes.all, function(x) x[[2]]))[!duplicated(node.match)]
-    c.author.unlist <- unlist(lapply(node.match.doc, function(x) paste(sapply(nodes.all[x], function(y) y[[3]][1]), collapse = "|")))
-    doi.unlist <- unlist(lapply(node.match.doc, function(x) paste(sapply(nodes.all[x], function(y) y[[3]][2]), collapse = "|")))
-    id.unlist <- unlist(lapply(node.match.doc, function(x) paste(sapply(nodes.all[x], function(y) y[[3]][3]), collapse = "|")))
-    no.of.docs <- sapply(node.match.unq, function(x) length(x))
-    actors <- data.frame(Author = nodes.unlist[!duplicated(node.match)],
-                         Affiliation = affl.unlist, No.of.docs = no.of.docs, DOI = doi.unlist, Article.ID = id.unlist, C.Author = c.author.unlist)
-    list(mat = mat.adj, actors = actors)
-  }
-  else 
-    if (node.type == "actor" && db == "wos") {
-      tc.unlist <- unlist(lapply(node.match.doc, function(x) sum(as.numeric(sapply(nodes.all[x], function(y) y[[2]][1])))))
-      doi.unlist <- unlist(lapply(node.match.doc, function(x) paste(sapply(nodes.all[x], function(y) y[[2]][2]), collapse = "|")))
-      id.unlist <- unlist(lapply(node.match.doc, function(x) paste(sapply(nodes.all[x], function(y) y[[2]][3]), collapse = "|")))
-      no.of.docs <- sapply(node.match.unq, function(x) length(x))
-      actors <- data.frame(Author = nodes.unlist[!duplicated(node.match)], Publications = no.of.docs, DOI = doi.unlist, Article.ID = id.unlist,
-                           Total.Citations = tc.unlist)
-      list(mat = mat.adj, actors = actors)
-    } 
-  else
-    mat.adj 
-})
-
-return(mat)
+                    # Create dataframe for actors containing all the relevant information
+                    if (node.type == "actor") {
+                      actors <- switch(db,
+                                    'com' = {
+        ind <- 3
+        affl.unlist <- unlist(lapply(nodes.all, function(x) x[[2]]))[!duplicated(node.match)]
+        c.author.unlist <- unlist(lapply(node.match.doc, function(x) paste(sapply(nodes.all[x], function(y) y[[ind]][1]), collapse = "|")))
+        data.frame(C.Author = c.author.unlist, Affiliation = affl.unlist)
+      },
+                                    'wos' = {
+        ind <- 2
+        tc.unlist <- unlist(lapply(node.match.doc, function(x) sum(as.numeric(sapply(nodes.all[x], function(y) y[[ind]][1])))))
+        data.frame(Total.Citations = tc.unlist)
+      })
+                      author <- nodes.unlist[!duplicated(node.match)]
+                      no.of.docs <- sapply(node.match.unq, function(x) length(x))
+                      doi.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                    paste(sapply(nodes.all[x], 
+                                                                                function(y) 
+                                                                                  y[[ind]][2]), collapse = "|")))
+                      id.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                    paste(sapply(nodes.all[x], 
+                                                                                function(y) 
+                                                                                  y[[ind]][3]), collapse = "|")))
+      
+                      actors <- data.frame(Author = author, Publications = no.of.docs, 
+                                         DOI = doi.unlist, Article.ID = id.unlist, actors)
+                      list(mat = mat.adj, actors = actors)
+                    }
+                    else
+                      mat.adj
+                  })
+  return(mat)
 }
 
 create.network <- function(mat, weighted = TRUE, mode = "undirected"){

@@ -15,7 +15,7 @@ shinyServer(function(input, output) {
         g_db <<- input$s_ftype
         # Load data form specified locations
         g_data <<- load.data(input$data_file$datapath, g_db)
-        
+        # Extract nodes (actors, terms, affiliations, categories) from uploaded data
         nodes <- extract.nodes(g_data, input$s_ftype, input$s_ntype, input$s_ttype)
         
         # Create the Node-Document matrix
@@ -33,7 +33,7 @@ shinyServer(function(input, output) {
         g_edge.list <<- cbind(get.data.frame(net), "undirected")
         colnames(g_edge.list) <<- c("Source", "Target", "Weight", "Type")
         g_res.summary <<- summary.results(net)
-        
+
         if (input$s_ntype == "actor") {
           node.results <- data.frame(Author = row.names(g_res.summary$node), g_res.summary$node)
           node.results <- merge(actors, node.results, by = "Author")
@@ -163,13 +163,16 @@ shinyServer(function(input, output) {
       if (nrow(g_res.summary$node) == 0)
         return(NULL)
     
-    if (g_db == "wos")
-      r <- g_res.summary$node[,-which(colnames(g_res.summary$node) %in% "DOI")]
+#     if (g_db == "wos")
+#       r <- g_res.summary$node[,-which(colnames(g_res.summary$node) %in% "DOI")]
 #     if (g_db == "com")
-#       r <- g_res.summary$node[,-9:-10]
-    
-    display.cols <- c("ID", "Author", "Article.ID", input$s_displaycols)
-    r <- r[, display.cols]
+#       r <- g_res.summary$node[,-which(colnames(g_res.summary$node) %in% c("DOI", "C.Author", "Affiliation"))]
+    if (g_db == "wos")  
+      display.cols <- c("ID", "Author", "Article.ID", "Total.Citations", input$s_displaycols)
+    if (g_db == "com")
+      display.cols <- c("ID", "Author", "Article.ID", input$s_displaycols)
+
+    r <- g_res.summary$node[, display.cols]
 #     if (nrow(r) != 0) {
 #       row_names <- rownames(r)
 #       r <- cbind(row_names, r)
