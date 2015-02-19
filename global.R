@@ -28,6 +28,9 @@ source("db.settings.R", local=TRUE)$value
 # Uploaded data
 g_data <- data.frame()
 
+# Matrix and Actor data
+g_mat <- list()
+
 # Edge List
 g_edge.list <- data.frame()
 
@@ -37,7 +40,8 @@ g_res.summary <- list(node=data.frame(),
 
 g_selected <- reactiveValues(row = data.frame())
 
-g_queue <- reactiveValues(data = data.frame())
+g_queue <- reactiveValues(sum.data = data.frame(),
+                          all.data = data.frame())
 
 # The source of the data (database)
 g_db <- NA
@@ -182,7 +186,7 @@ extract.nodes <- function(data, db = "wos", node.type = "actor",
                           actors.tmp.i <- NA
                         if (!is.na(actors.tmp.i[1])) {
                           nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, Affiliation = affl.tmp.i, 
-                                                        Doc.info = data[i, node.settings$col[3:5]])
+                                                        Doc.info = data[i, node.settings$col[3:length(node.settings$col)]])
                           list.ind <- list.ind + 1
                         }          
                         }
@@ -193,7 +197,8 @@ extract.nodes <- function(data, db = "wos", node.type = "actor",
                           if (length(actors.tmp.i) == 0)
                             actors.tmp.i <- NA
                           if (!is.na(actors.tmp.i[1])) {
-                            nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, Doc.info = data[i, node.settings$col[3:5]])
+                            nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, 
+                                                          Doc.info = data[i, node.settings$col[3:length(node.settings$col)]])
                             list.ind <- list.ind + 1
                           }
                         }
@@ -280,29 +285,34 @@ create.matrix <- function(nodes, node.type = "actor", db = "wos", term.minlength
                     if (node.type == "actor") {
                       actors <- switch(db,
                                     'com' = {
-        ind <- 3
-        affl.unlist <- unlist(lapply(nodes.all, function(x) x[[2]]))[!duplicated(node.match)]
-        c.author.unlist <- unlist(lapply(node.match.doc, function(x) paste(sapply(nodes.all[x], function(y) y[[ind]][1]), collapse = "|")))
-        data.frame(C.Author = c.author.unlist, Affiliation = affl.unlist)
-      },
+                                            ind <- 3
+                                            affl.unlist <- unlist(lapply(nodes.all, function(x) 
+                                                                                        x[[2]]))[!duplicated(node.match)]
+                                            c.author.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                                                paste(sapply(nodes.all[x], function(y) 
+                                                                                                                              y[[ind]][1]), collapse = "|")))
+                                            data.frame(C.Author = c.author.unlist, Affiliation = affl.unlist)
+                                    },
                                     'wos' = {
-        ind <- 2
-        tc.unlist <- unlist(lapply(node.match.doc, function(x) sum(as.numeric(sapply(nodes.all[x], function(y) y[[ind]][1])))))
-        data.frame(Total.Citations = tc.unlist)
-      })
+                                            ind <- 2
+                                            tc.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                                          sum(as.numeric(sapply(nodes.all[x], function(y) 
+                                                                                                                                y[[ind]][1])))))
+                                            data.frame(Total.Citations = tc.unlist)
+                                    })
                       author <- nodes.unlist[!duplicated(node.match)]
                       no.of.docs <- sapply(node.match.unq, function(x) length(x))
                       doi.unlist <- unlist(lapply(node.match.doc, function(x) 
-                                                                    paste(sapply(nodes.all[x], 
-                                                                                function(y) 
-                                                                                  y[[ind]][2]), collapse = "|")))
+                                                                      paste(sapply(nodes.all[x], function(y) 
+                                                                                                    y[[ind]][2]), collapse = "|")))
                       id.unlist <- unlist(lapply(node.match.doc, function(x) 
-                                                                    paste(sapply(nodes.all[x], 
-                                                                                function(y) 
-                                                                                  y[[ind]][3]), collapse = "|")))
-      
+                                                                      paste(sapply(nodes.all[x], function(y) 
+                                                                                                    y[[ind]][3]), collapse = "|")))
+                      title.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                      paste(sapply(nodes.all[x], function(y) 
+                                                                                                    y[[ind]][4]), collapse = "|")))
                       actors <- data.frame(Author = author, Publications = no.of.docs, 
-                                         DOI = doi.unlist, Article.ID = id.unlist, actors)
+                                          DOI = doi.unlist, Article.ID = id.unlist, Title = title.unlist, actors)
                       list(mat = mat.adj, actors = actors)
                     }
                     else

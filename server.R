@@ -19,12 +19,12 @@ shinyServer(function(input, output) {
         nodes <- extract.nodes(g_data, input$s_ftype, input$s_ntype, input$s_ttype)
         
         # Create the Node-Document matrix
-        mat <- create.matrix(nodes, input$s_ntype, input$s_ftype, input$n_tlength, 
+        g_mat <<- create.matrix(nodes, input$s_ntype, input$s_ftype, input$n_tlength, 
                                 input$s_tweight)
-        
+        mat <- g_mat
         if (input$s_ntype == "actor") {
-          actors <- mat$actors
-          mat <- mat$mat
+          actors <- g_mat$actors
+          mat <- g_mat$mat
         }
         
         # Create SNA network
@@ -54,7 +54,11 @@ shinyServer(function(input, output) {
     if (length(input$btn_add) != 0)
       if (input$btn_add != 0)
         isolate({
-          g_queue$data <<- unique(rbind(g_queue$data, g_selected$row))
+          g_queue$sum.data <<- unique(rbind(g_queue$sum.data, g_selected$row))
+          
+          sel.node <- g_selected$row[, "ID"]
+          data.row <- g_res.summary$node[which(g_mat$actors$ID == sel.node), ]
+          g_queue$all.data <<- unique(rbind(g_queue$sum.data, data.row))
         })
   })
   
@@ -65,7 +69,7 @@ shinyServer(function(input, output) {
     if (length(input$btn_remove) != 0)
       if (input$btn_remove != 0)
         isolate({
-          g_queue$data <<- g_queue$data[-which(g_queue$data$ID == as.numeric(input$queue.rows[1])), ]
+          g_queue$sum.data <<- g_queue$sum.data[-which(g_queue$sum.data$ID == as.numeric(input$queue.rows[1])), ]
         })
   })
   
@@ -76,7 +80,7 @@ shinyServer(function(input, output) {
     if (length(input$btn_clear) != 0)
       if (input$btn_clear != 0)
         isolate({
-          g_queue$data <<- data.frame()
+          g_queue$sum.data <<- data.frame()
         })
   })
   
@@ -150,7 +154,7 @@ shinyServer(function(input, output) {
       paste0('sel_results', Sys.Date(), '.csv')
     },
     content = function(file) {
-      write.csv(g_queue$data, file, row.names = FALSE)
+      write.csv(g_queue$all.data, file, row.names = FALSE)
     },
     contentType = "text/csv"
   )
@@ -201,19 +205,21 @@ output$t_selrow <- renderDataTable({
     return(NULL)
   
   sel.node <- g_res.summary$node[which(g_res.summary$node$ID == as.numeric(input$res.rows[1])), ]
-  sel.articles <- as.numeric(unlist(strsplit(as.character(sel.node[, "Article.ID"]), split = "|", fixed = TRUE)))
-  
-  sel.cols <- switch(g_db,
-                     "com" = c(1,2,3),
-                     "wos" = c(1, 10, 24))
-  
   g_selected$row <<- sel.node
   
-  r <- g_data[which(g_data$ID %in% sel.articles), sel.cols]
+  sel.articles <- as.numeric(unlist(strsplit(as.character(sel.node[, "Article.ID"]), split = "|", fixed = TRUE)))
+  r <- g_data[which(g_data$ID %in% sel.articles), ]
   
-#     if (nrow(g_res.summary$node) == 0)
-#       return(NULL)
-    return(r)
+  r <- switch(g_db,
+              "com" = {
+                cbind(r[, c("ID", "Title", "Publication.year")], sel.node[, "Affiliation"])
+              },
+              "wos" = {
+                r[, c("ID", "TI", "PY", "C1")]
+              }
+              )
+  colnames(r) <- c("ID", "Title", "Publication.Year", "Affiliation")
+  return(r)
 }, options = list(searching=0, ordering=1, processing=0, paging=1, info=0,
                   pagingType = "simple", lengthMenu = c(5, 10, 20), pageLength = 5))
 
@@ -227,7 +233,7 @@ output$t_selrow <- renderDataTable({
 # When add button is clicked, add selection to queue
 #-------------------------------------------------------------------------------
 output$t_queue <- renderDataTable({
-  return(g_queue$data)
+  return(g_queue$sum.data)
 }, options = list(searching=0, ordering=1, processing=0, paging=1, info=0,
                   pagingType = "simple", lengthMenu = c(5, 10, 20), pageLength = 5),
    callback = "function(table) {
