@@ -11,13 +11,18 @@ shinyServer(function(input, output) {
   #-------------------------------------------------------------------------------
   observe({
     if (input$btn_analysis != 0){
-      isolate({
+      isolate({   
+        g_queue$sum.data <<- data.frame()
+        g_queue$all.data <<- data.frame()
+        g_selected$row <<- data.frame()
+        
         g_db <<- input$s_ftype
         # Load data form specified locations
         g_data <<- load.data(input$data_file$datapath, g_db)
+
         # Extract nodes (actors, terms, affiliations, categories) from uploaded data
         nodes <- extract.nodes(g_data, input$s_ftype, input$s_ntype, input$s_ttype)
-        
+
         # Create the Node-Document matrix
         g_mat <<- create.matrix(nodes, input$s_ntype, input$s_ftype, input$n_tlength, 
                                 input$s_tweight)
@@ -33,7 +38,7 @@ shinyServer(function(input, output) {
         g_edge.list <<- cbind(get.data.frame(net), "undirected")
         colnames(g_edge.list) <<- c("Source", "Target", "Weight", "Type")
         g_res.summary <<- summary.results(net)
-
+        
         if (input$s_ntype == "actor") {
           node.results <- data.frame(Author = row.names(g_res.summary$node), g_res.summary$node)
           node.results <- merge(actors, node.results, by = "Author")
@@ -54,11 +59,11 @@ shinyServer(function(input, output) {
     if (length(input$btn_add) != 0)
       if (input$btn_add != 0)
         isolate({
-          g_queue$sum.data <<- unique(rbind(g_queue$sum.data, g_selected$row))
+          g_queue$sum.data <<- unique(rbind(g_queue$sum.data, g_selected$row[, c("ID", "Author", "Affiliation")]))
           
-          sel.node <- g_selected$row[, "ID"]
-          data.row <- g_res.summary$node[which(g_mat$actors$ID == sel.node), ]
-          g_queue$all.data <<- unique(rbind(g_queue$sum.data, data.row))
+#           sel.node <- g_selected$row[, "ID"]
+#           data.row <- g_res.summary$node[which(g_mat$actors$ID == sel.node), ]
+          g_queue$all.data <<- unique(rbind(g_queue$all.data, g_selected$row))
         })
   })
   
@@ -171,12 +176,13 @@ shinyServer(function(input, output) {
 #       r <- g_res.summary$node[,-which(colnames(g_res.summary$node) %in% "DOI")]
 #     if (g_db == "com")
 #       r <- g_res.summary$node[,-which(colnames(g_res.summary$node) %in% c("DOI", "C.Author", "Affiliation"))]
-    if (g_db == "wos")  
-      display.cols <- c("ID", "Author", "Article.ID", "Total.Citations", input$s_displaycols)
-    if (g_db == "com")
-      display.cols <- c("ID", "Author", "Article.ID", input$s_displaycols)
+      display.cols <- switch(g_db,
+           "wos" =   c("ID", "Author", "Article.ID", "Total.Citations", input$s_displaycols),
+           "com" = c("ID", "Author", "Article.ID", input$s_displaycols),
+           "pat" = c("ID", "Author", "Article.ID", "City", input$s_displaycols))
 
-    r <- g_res.summary$node[, display.cols]
+      r <- g_res.summary$node[, display.cols]
+
 #     if (nrow(r) != 0) {
 #       row_names <- rownames(r)
 #       r <- cbind(row_names, r)
@@ -184,7 +190,7 @@ shinyServer(function(input, output) {
       return(r)
   }, options = list(searching=1, ordering=1, processing=0, 
                     lengthMenu = c(5, 10, 20, 30, 40), pageLength = 5, orderClasses = TRUE, info = TRUE,
-                    stateSave = TRUE, pagingType = "simple_numbers"),
+                    stateSave = TRUE, pagingType = "simple_numbers", scrollX = TRUE),
     callback = "function(table) {
                     table.on('click.dt', 'tr', function() {
                     $(this).closest('table').find('.selected').each(function(){
@@ -202,7 +208,7 @@ shinyServer(function(input, output) {
 #-------------------------------------------------------------------------------
 output$t_selrow <- renderDataTable({
   if (is.null(input$res.rows))
-    return(NULL)
+      return(NULL)
   
   sel.node <- g_res.summary$node[which(g_res.summary$node$ID == as.numeric(input$res.rows[1])), ]
   g_selected$row <<- sel.node
@@ -216,12 +222,16 @@ output$t_selrow <- renderDataTable({
               },
               "wos" = {
                 r[, c("ID", "TI", "PY", "C1")]
+              },
+              "pat" = {
+                cbind(r[, c("ID", "Title", "Publication.Date")], sel.node[, c("Affiliation")])
               }
               )
   colnames(r) <- c("ID", "Title", "Publication.Year", "Affiliation")
+  # print(r)
   return(r)
 }, options = list(searching=0, ordering=1, processing=0, paging=1, info=0,
-                  pagingType = "simple", lengthMenu = c(5, 10, 20), pageLength = 5))
+                  pagingType = "simple", lengthMenu = c(5, 10, 20), pageLength = 5, scrollX = TRUE))
 
 
 #   output$rows_out <- renderText({
@@ -235,7 +245,7 @@ output$t_selrow <- renderDataTable({
 output$t_queue <- renderDataTable({
   return(g_queue$sum.data)
 }, options = list(searching=0, ordering=1, processing=0, paging=1, info=0,
-                  pagingType = "simple", lengthMenu = c(5, 10, 20), pageLength = 5),
+                  pagingType = "simple", lengthMenu = c(5, 10, 20), pageLength = 5, scrollX = TRUE),
    callback = "function(table) {
                     table.on('click.dt', 'tr', function() {
                     $(this).closest('table').find('.selected').each(function(){

@@ -25,27 +25,6 @@ library(shiny)
 source("db.settings.R", local=TRUE)$value
 
 # ------------------ SET GLOBAL VARS ------------------------#
-# Uploaded data
-g_data <- data.frame()
-
-# Matrix and Actor data
-g_mat <- list()
-
-# Edge List
-g_edge.list <- data.frame()
-
-# Summary of Results
-g_res.summary <- list(node=data.frame(),
-                      net=data.frame())
-
-g_selected <- reactiveValues(row = data.frame())
-
-g_queue <- reactiveValues(sum.data = data.frame(),
-                          all.data = data.frame())
-
-# The source of the data (database)
-g_db <- NA
-
 # Data can currently only be read from web of science (wos) 
 # or Compendex (com) database
 db.l <- list('Web of Science' = 'wos', Compendex = 'com', Patent = 'pat')
@@ -68,6 +47,31 @@ display.cols.l <- c('Publications', 'Degree', 'Betweenness', 'Closeness', 'Eigen
                     'Local.Cluster')
 
 # ------------------ GLOBAL FUNCTIONS ------------------------#
+g_initialize <- function() {
+  # Uploaded data
+  g_data <<- data.frame()
+  
+  # Matrix and Actor data
+  g_mat <<- list()
+  
+  # Edge List
+  g_edge.list <<- data.frame()
+  
+  # Summary of Results
+  g_res.summary <<- list(node=data.frame(),
+                        net=data.frame())
+  
+  g_selected <<- reactiveValues(row = data.frame())
+  
+  g_queue <<- reactiveValues(sum.data = data.frame(),
+                            all.data = data.frame())
+  
+  # The source of the data (database)
+  g_db <<- NA
+}
+
+g_initialize()
+
 # Load Data from the Files Selected
 load.data <- function(file.loc, db) {
   if (length(file.loc) == 0)
@@ -110,7 +114,12 @@ load.data <- function(file.loc, db) {
         # rbind(data, data.tmp) 
         data.tmp
       },
-      "pat" = {}
+      "pat" = {
+        tryCatch(data.tmp <- read.csv(file.loc, stringsAsFactors = FALSE),
+                 error = function(e) stop("Error opening/reading csv file. Ensure Compendex file downloaded according to description: ", e))
+        # rbind(data, data.tmp) 
+        data.tmp
+      }
   )
   data <- unique(data)
   data <- data.frame(ID = seq(1,nrow(data)), data)
@@ -198,12 +207,43 @@ extract.nodes <- function(data, db = "wos", node.type = "actor",
                             actors.tmp.i <- NA
                           if (!is.na(actors.tmp.i[1])) {
                             nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, 
-                                                          Doc.info = data[i, node.settings$col[3:length(node.settings$col)]])
+                                                          Doc.info = data[i, node.settings$col[2:length(node.settings$col)]])
                             list.ind <- list.ind + 1
                           }
                         }
+                      },
+                      'pat' = {
+                        # Determine each actors affiliation from info in brackets next to name
+                        affl.tmp <- lapply(actors.tmp, function(x) gsub(node.settings$affl, '\\1', x))
+                        
+                        for (i in 1:length(actors.tmp)) {
+                          actors.tmp.i <- gsub(node.settings$rem, "", str_trim(actors.tmp[[i]]))
+                          # Change first names to initials
+                          actors.tmp.i <-sapply(strsplit(actors.tmp.i, split = ","), 
+                                                function(x) {
+                                                  l.name <- str_trim(x[1])
+                                                  if (length(x) > 1) {
+                                                    f.name <- strsplit(str_trim(x[2]), split = "\\s+")
+                                                    f.name <- paste(sapply(f.name, function(y) gsub(node.settings$f.name, "\\1", y)), collapse = ".")
+                                                    return(paste(l.name, f.name, sep = ","))
+                                                  }
+                                                  if (length(x) == 0 || tolower(l.name) == "anon")
+                                                    return(NA)                                        
+                                                  return(l.name)
+                                                })       
+                          affl.tmp.i <- gsub(node.settings$rem, "", str_trim(affl.tmp[[i]]))
+                          if (length(affl.tmp.i) == 0)
+                            affl.tmp.i <- NA
+                          
+                          if (length(actors.tmp.i) == 0)
+                            actors.tmp.i <- NA
+                          if (!is.na(actors.tmp.i[1])) {
+                            nodes.tmp[[list.ind]] <- list(Actor = actors.tmp.i, Affiliation = affl.tmp.i, 
+                                                          Doc.info = data[i, node.settings$col[2:length(node.settings$col)]])
+                            list.ind <- list.ind + 1
+                          }          
+                        }
                       })    
-                    
                     nodes.tmp
                   },
                   category = {
@@ -298,8 +338,23 @@ create.matrix <- function(nodes, node.type = "actor", db = "wos", term.minlength
                                             tc.unlist <- unlist(lapply(node.match.doc, function(x) 
                                                                                           sum(as.numeric(sapply(nodes.all[x], function(y) 
                                                                                                                                 y[[ind]][1])))))
-                                            data.frame(Total.Citations = tc.unlist)
-                                    })
+                                            email.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                                            paste(unique(sapply(nodes.all[x], function(y) 
+                                                                                                                          y[[ind]][5])), collapse = "|")))
+                                            affl.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                                            paste(unique(sapply(nodes.all[x], function(y) 
+                                                                                                                          y[[ind]][6])), collapse = "|")))
+                                            data.frame(Total.Citations = tc.unlist, Affiliation = affl.unlist, Email = email.unlist)
+                                    },
+                                    'pat' = {
+                                            ind <- 3
+                                            city.unlist <- unlist(lapply(nodes.all, function(x) 
+                                                                                        x[[2]]))[!duplicated(node.match)]
+                                            affl.unlist <- unlist(lapply(node.match.doc, function(x) 
+                                                                                            paste(unique(sapply(nodes.all[x], function(y) 
+                                                                                                                              y[[ind]][1])), collapse = "|")))
+                                            data.frame(Affiliation = affl.unlist, City = city.unlist)
+                                      })
                       author <- nodes.unlist[!duplicated(node.match)]
                       no.of.docs <- sapply(node.match.unq, function(x) length(x))
                       doi.unlist <- unlist(lapply(node.match.doc, function(x) 

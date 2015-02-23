@@ -5,7 +5,7 @@ db.settings <- function(db, node.type, term.type = NA) {
                   'wos' = {  
                     # Columns to extract from the data for each node type selected
                     col <- switch(node.type,
-                                      actor = c("AU", "C1", "TC", "DI", "ID", "TI"),
+                                      actor = c("AU", "TC", "DI", "ID", "TI", "EM", "C1"),
                                       term = switch(term.type, title = "TI", abstract = "AB", keyword = "DE", NA),
                                       affl = "C1",
                                       category = "WC")
@@ -52,7 +52,33 @@ db.settings <- function(db, node.type, term.type = NA) {
                     
                     list(col = col, sep = sep, rem = rem,  ext = ext, affl = affl, f.name = f.name)
                   },
-                  'pat' = {NA}
+                  'pat' = {  
+                    # Columns to extract from the data for each node type selected
+                    col <- switch(node.type,
+                                  actor = c("Inventor.Name", "Assignee", "Document.Number", "ID", "Title"),
+                                  term = switch(term.type, title = "Title", abstract = "Abstract", NA),
+                                  affl = "Assignee",
+                                  category = "Primary.Class")
+                    # Characters seperating nodes in the data (;)
+                    sep <- sep.l[4]
+                    # Characters to be extracted from the data
+                    ext <- switch(node.type,
+                                  actor = "\\s*\\(.+\\)\\s*", 
+                                  "")
+                    #Characters to be removed from the data
+                    rem <- switch(node.type,
+                                  actor = "\\s*\\(.+\\)\\s*")
+                    
+                    # Required to extract affiliation number from author name
+                    affl <- switch(node.type,
+                                   actor = ".*\\((.*)\\).*", 
+                                   "")
+                    
+                    # Extract initials from first names
+                    f.name <- ifelse(node.type == "actor", "^(.?).*", NA)
+                    
+                    list(col = col, sep = sep, rem = rem, ext = ext, f.name = f.name, affl = affl)
+                  }
   )
   return(settings)
 }
