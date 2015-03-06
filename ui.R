@@ -19,14 +19,17 @@ shinyUI(dashboardPage(
         tags$style(type="text/css", '#t_result tfoot, #t_selrow tfoot, #t_queue tfoot {display:none;}'),
         tags$style(type="text/css", '#t_result tr, #t_selrow tr, #t_queue tr {border:1px solid blue;}'),
         tags$style(type="text/css", "#btn_analysis, #btn_add {color:green;border:1px solid black;}"),
-        tags$style(type="text/css", "#btn_remove, #btn_clear  {color:red;border:1px solid black;}")
+        tags$style(type="text/css", "#btn_remove, #btn_clear  {color:red;border:1px solid black;}"),
+        tags$style(type="text/css", ".shiny-progress .bar { background-color: #FF0000; .opacity = 0.8;}
+                                     .shiny-progress .progress { height:7px;}
+                                     .shiny-progress .progress-text .progress-message { font-size: 100%;}")
       ),
       fluidRow(
       box(
         width=12,
         title = "File Upload", status = "primary", solidHeader = FALSE, collapsible = TRUE,
         selectInput('s_ftype', 'File Type:', db.l),
-        fileInput('data_file', 'Choose File:',
+        fileInput('data_file', 'Choose File:', multiple = TRUE,
                   accept=c('.csv','text/csv', 'text/comma-separated-values','text/plain', '.txt'))
       ),
       box(

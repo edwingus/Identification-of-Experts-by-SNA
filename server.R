@@ -5,25 +5,32 @@
 # http://shiny.rstudio.com
 #
 
-shinyServer(function(input, output) {
+shinyServer(function(session, input, output) {
   #-------------------------------------------------------------------------------
   # When analysis button is clicked, upload and analyze data
   #-------------------------------------------------------------------------------
   observe({
     if (input$btn_analysis != 0){
-      isolate({   
+      isolate({  
+        progress <- Progress$new(session, min=1, max=5)
+        on.exit(progress$close())
+        
         g_queue$sum.data <<- data.frame()
         g_queue$all.data <<- data.frame()
         g_selected$row <<- data.frame()
         
         g_db <<- input$s_ftype
         # Load data form specified locations
+        
+        progress$set(message = 'Uploading Data', value = 1)
         g_data <<- load.data(input$data_file$datapath, g_db)
 
         # Extract nodes (actors, terms, affiliations, categories) from uploaded data
+        progress$set(message = 'Extracting Nodes', value = 2)
         nodes <- extract.nodes(g_data, input$s_ftype, input$s_ntype, input$s_ttype)
 
         # Create the Node-Document matrix
+        progress$set(message = 'Creating Adjacency Matrix', value = 3)
         g_mat <<- create.matrix(nodes, input$s_ntype, input$s_ftype, input$n_tlength, 
                                 input$s_tweight)
         mat <- g_mat
@@ -32,6 +39,7 @@ shinyServer(function(input, output) {
           mat <- g_mat$mat
         }
         
+        progress$set(message = 'Creating Calculating Network Metrics', value = 4)
         # Create SNA network
         net <- create.network(mat)
         
@@ -44,10 +52,6 @@ shinyServer(function(input, output) {
           node.results <- merge(actors, node.results, by = "Author")
           g_res.summary$node <<- data.frame(ID = seq(1:nrow(g_res.summary$node)), node.results)
         }
-        
-        #         if (input$s_plot) {
-        #           plot.results(res.summary$node, plot.by, plot.count, plot.edges.b)
-        #         }
       })
     }
   })

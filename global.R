@@ -1,7 +1,7 @@
 library(shiny)
 
 # ------------------- LOAD LIBRARIES ------------------------#
-packages <- c("tm", "igraph", "stringr", "shiny", "devtools")
+packages <- c("tm", "igraph", "stringr", "shiny", "devtools", "plyr")
 if (length(setdiff(packages, installed.packages())) > 0)
   install.packages(setdiff(packages, installed.packages()))
 
@@ -20,6 +20,8 @@ library(igraph)
 library(stringr)
 # shiny package required for creating the website
 library(shiny)
+# used for combining multiple files of uploaded data
+library(plyr)
 
 
 source("db.settings.R", local=TRUE)$value
@@ -76,21 +78,13 @@ g_initialize()
 load.data <- function(file.loc, db) {
   if (length(file.loc) == 0)
     stop("No files selected. Make sure to select a file and press open.")
-  # file.loc <- readline(cat("Enter the location of your Web of Science or Compendex csv file:\n"))
-  # Determine number of Web of Science Files
-  # wos.files <- which(sapply(file.loc, function(x) substr(x, nchar(x)-2, nchar(x)) == "txt"))
-  # Determine number of Compendex Files
-  # com.files <- which(sapply(file.loc, function(x) substr(x, nchar(x)-2, nchar(x)) == "csv"))
-  # Only allow the selection of flies from one database, not both
-  # if (length(wos.files) > 0 && length(com.files) > 0)
-  #  stop("Select either Web of Science or Compendex Files, not both")
   
-  # if (length(wos.files) > 0)
-    # for (i in wos.files) {
-  data <- switch(db,
-      'wos' = {
+  data <- data.frame()
+  for (i in 1:length(file.loc)) {
+      data.i <- switch(db,
+          'wos' = {
         # data <- data.frame()
-        tryCatch(data.tmp <- read.table(file.loc, sep="\t", quote="", header=T, encoding = "UTF-8", na.string = NA, 
+        tryCatch(data.tmp <- read.table(file.loc[i], sep="\t", quote="", header=T, encoding = "UTF-8", na.string = NA, 
                                         comment.char = "", fill = TRUE, blank.lines.skip = TRUE, row.names=NULL, 
                                         stringsAsFactors = FALSE),
                 error = function(e) stop("Error opening/reading txt file. Ensure Web Of Science file downloaded according to description: ", e))
@@ -103,24 +97,21 @@ load.data <- function(file.loc, db) {
         # rbind(data, data.tmp)
         data.tmp
       },
-  
-  # if (length(com.files) > 0)
-    # for (i in com.files) {
-      # Read Web of Science (wos) or Compendex(com) file. If error occurs reading
-      # the file, return error
-      'com' = {
-        tryCatch(data.tmp <- read.csv(file.loc, stringsAsFactors = FALSE),
+          'com' = {
+        tryCatch(data.tmp <- read.csv(file.loc[i], stringsAsFactors = FALSE),
                 error = function(e) stop("Error opening/reading csv file. Ensure Compendex file downloaded according to description: ", e))
         # rbind(data, data.tmp) 
         data.tmp
       },
-      "pat" = {
-        tryCatch(data.tmp <- read.csv(file.loc, stringsAsFactors = FALSE),
+          'pat' = {
+        tryCatch(data.tmp <- read.csv(file.loc[1], stringsAsFactors = FALSE),
                  error = function(e) stop("Error opening/reading csv file. Ensure Compendex file downloaded according to description: ", e))
-        # rbind(data, data.tmp) 
         data.tmp
       }
-  )
+          )
+    data.i <- data.i[, which(!is.na(colnames(data.i)))]
+    data <- rbind.fill(data, data.i)
+  }
   data <- unique(data)
   data <- data.frame(ID = seq(1,nrow(data)), data)
   return(data)
@@ -265,7 +256,7 @@ extract.nodes <- function(data, db = "wos", node.type = "actor",
 
 # Create the Node-Document matrix
 create.matrix <- function(nodes, node.type = "actor", db = "wos", term.minlength = 1, 
-                          term.weight = "ntc", match.max = 0.10, 
+                          term.weight = "ntc", match.max = 0, 
                           clean.str = "dpto|dept|department"){
   mat <- switch(node.type,
                 term = 
@@ -303,7 +294,7 @@ create.matrix <- function(nodes, node.type = "actor", db = "wos", term.minlength
                     # Compare nodes by adist function. If nodes are close to one another, they are a match.
                     # The closeness of matches is set by match.max. If match.max is set to 0.1, then less
                     # than 10% of the strings must not match to be seen as the same.
-                    match.b <- adist(nodes.unlist, nodes.unlist, ignore.case = TRUE)/mat.strlen < match.max
+                    match.b <- adist(nodes.unlist, nodes.unlist, ignore.case = TRUE)/mat.strlen <= match.max
                     # Determine which nodes match
                     node.match <- apply(match.b, 1, function(x) which(x))
                     # Find unique matches. Since match of multiple nodes will have the same matching indexes,
