@@ -23,7 +23,7 @@ db.settings <- function(db, node.type, term.type = NA) {
                   'com' = {
                     # Columns to extract from the data for each node type selected
                     col <- switch(node.type,
-                                       actor = c("Author", "Author.affiliation", "ISBN13", "DOI", "ID", "Title"),
+                                       actor = c("Author", "Author.affiliation", "CODEN", "DOI", "ID", "Title"),
                                        term = switch(term.type, title = "Title", abstract = "Abstract", 
                                                      keyword = c("Controlled.Subject.terms", "Uncontrolled terms")),
                                        affl = "Author.affiliation",
