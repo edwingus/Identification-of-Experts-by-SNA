@@ -70,7 +70,7 @@ shinyUI(dashboardPage(
           width=12,
           title = "All Results (Click Row to Select)", status = "primary", solidHeader = FALSE, collapsible = TRUE,
       # HTML("Results Summary"),
-          dataTableOutput("t_result"),
+          #dataTableOutput("t_result"),
           uiOutput("add_button")
         ),
         box(
