@@ -83,7 +83,7 @@ shinyUI(dashboardPage(
      # # HTML("Results Summary"),
       #    #dataTableOutput("t_result"),
       #    uiOutput("add_button")
-        ),
+    #    ),
       #  box(
         #  width=12,
        #   title = "Selected Row", status = "primary", solidHeader = FALSE, collapsible = TRUE,
