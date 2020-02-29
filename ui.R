@@ -66,20 +66,31 @@ shinyUI(dashboardPage(
       uiOutput("down_buttons"),
       HTML("<br>"),
       fluidRow(
+        
         box(
           width=12,
-          title = "All Results (Click Row to Select)", status = "primary", solidHeader = FALSE, collapsible = TRUE,
-      # HTML("Results Summary"),
-          #dataTableOutput("t_result"),
-          uiOutput("add_button")
+          title = "Please upload your data and click on ANALYSIS - After the analysis bar is completed, use the menu on the top to download your results", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+          # HTML("Results Summary"),
+          # dataTableOutput("t_result"),
+          #uiOutput("add_button")
         ),
-        box(
-          width=12,
-          title = "Selected Row", status = "primary", solidHeader = FALSE, collapsible = TRUE,
-      # HTML("<hr>"),
-      # HTML("Selected Row"),
-          dataTableOutput("t_selrow")
+        
+        
+        
+        # box(
+       #   width=12,
+      #    title = "All Results (Click Row to Select)", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+     # # HTML("Results Summary"),
+      #    #dataTableOutput("t_result"),
+      #    uiOutput("add_button")
         ),
+      #  box(
+        #  width=12,
+       #   title = "Selected Row", status = "primary", solidHeader = FALSE, collapsible = TRUE,
+   #   # HTML("<hr>"),
+   #   # HTML("Selected Row"),
+   #       dataTableOutput("t_selrow")
+     #   ),
         box(
           width=12,
           title = "Selected Results", status = "primary", solidHeader = FALSE, collapsible = TRUE,
